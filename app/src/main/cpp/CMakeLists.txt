@@ -70,7 +70,7 @@ function(build_library target_name)
 endfunction()
 
 if (${ANDROID_ABI} STREQUAL "arm64-v8a")
-    build_library("whisper_v8fp16_va")
+    build_library("whisper_vfpv4")
 elseif (${ANDROID_ABI} STREQUAL "armeabi-v7a")
     build_library("whisper_vfpv4")
 endif ()
