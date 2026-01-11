@@ -3,6 +3,7 @@ package ix.radon.hexagon.asr
 import android.content.res.AssetManager
 import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.InputStream
@@ -16,6 +17,7 @@ class WhisperContext private constructor(private var ptr: Long) {
         Executors.newSingleThreadExecutor().asCoroutineDispatcher()
     )
 
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     suspend fun transcribeData(data: FloatArray, printTimestamp: Boolean = true): String = withContext(scope.coroutineContext) {
         require(ptr != 0L)
         val numThreads = WhisperCpuConfig.preferredThreadCount
@@ -35,14 +37,17 @@ class WhisperContext private constructor(private var ptr: Long) {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     suspend fun benchMemory(nthreads: Int): String = withContext(scope.coroutineContext) {
         return@withContext WhisperLib.benchMemcpy(nthreads)
     }
 
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     suspend fun benchGgmlMulMat(nthreads: Int): String = withContext(scope.coroutineContext) {
         return@withContext WhisperLib.benchGgmlMulMat(nthreads)
     }
 
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     suspend fun release() = withContext(scope.coroutineContext) {
         if (ptr != 0L) {
             WhisperLib.freeContext(ptr)
@@ -50,6 +55,7 @@ class WhisperContext private constructor(private var ptr: Long) {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     protected fun finalize() {
         runBlocking {
             release()
@@ -57,6 +63,7 @@ class WhisperContext private constructor(private var ptr: Long) {
     }
 
     companion object {
+        @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
         fun createContextFromFile(filePath: String): WhisperContext {
             val ptr = WhisperLib.initContext(filePath)
             if (ptr == 0L) {
@@ -65,6 +72,7 @@ class WhisperContext private constructor(private var ptr: Long) {
             return WhisperContext(ptr)
         }
 
+        @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
         fun createContextFromInputStream(stream: InputStream): WhisperContext {
             val ptr = WhisperLib.initContextFromInputStream(stream)
 
@@ -74,6 +82,7 @@ class WhisperContext private constructor(private var ptr: Long) {
             return WhisperContext(ptr)
         }
 
+        @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
         fun createContextFromAsset(assetManager: AssetManager, assetPath: String): WhisperContext {
             val ptr = WhisperLib.initContextFromAsset(assetManager, assetPath)
 
@@ -83,6 +92,7 @@ class WhisperContext private constructor(private var ptr: Long) {
             return WhisperContext(ptr)
         }
 
+        @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
         fun getSystemInfo(): String {
             return WhisperLib.getSystemInfo()
         }
@@ -90,39 +100,17 @@ class WhisperContext private constructor(private var ptr: Long) {
 }
 
 private class WhisperLib {
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     companion object {
         init {
-            Log.d(LOG_TAG, "Primary ABI: ${Build.SUPPORTED_ABIS[0]}")
-            var loadVfpv4 = false
-            var loadV8fp16 = false
             if (isArmEabiV7a()) {
                 // armeabi-v7a needs runtime detection support
-                val cpuInfo = cpuInfo()
-                cpuInfo?.let {
-                    Log.d(LOG_TAG, "CPU info: $cpuInfo")
-                    if (cpuInfo.contains("vfpv4")) {
-                        Log.d(LOG_TAG, "CPU supports vfpv4")
-                        loadVfpv4 = true
-                    }
-                }
-            } else if (isArmEabiV8a()) {
-                // ARMv8.2a needs runtime detection support
-                val cpuInfo = cpuInfo()
-                cpuInfo?.let {
-                    Log.d(LOG_TAG, "CPU info: $cpuInfo")
-                    if (cpuInfo.contains("fphp")) {
-                        Log.d(LOG_TAG, "CPU supports fp16 arithmetic")
-                        loadV8fp16 = true
-                    }
-                }
-            }
-
-            if (loadVfpv4) {
                 Log.d(LOG_TAG, "Loading libwhisper_vfpv4.so")
                 System.loadLibrary("whisper_vfpv4")
-            } else if (loadV8fp16) {
-                Log.d(LOG_TAG, "Loading libwhisper_v8fp16_va.so")
-                System.loadLibrary("whisper_v8fp16_va")
+            } else if (isArmEabiV8a()) {
+                // ARMv8.2a needs runtime detection support
+                Log.d(LOG_TAG, "Loading libwhisper_v8_va.so")
+                System.loadLibrary("whisper_v8_va")
             } else {
                 Log.d(LOG_TAG, "Loading libwhisper.so")
                 System.loadLibrary("whisper")
@@ -160,10 +148,12 @@ private fun toTimestamp(t: Long, comma: Boolean = false): String {
     return String.format("%02d:%02d:%02d%s%03d", hr, min, sec, delimiter, msec)
 }
 
+@RequiresApi(Build.VERSION_CODES.LOLLIPOP)
 private fun isArmEabiV7a(): Boolean {
     return Build.SUPPORTED_ABIS[0].equals("armeabi-v7a")
 }
 
+@RequiresApi(Build.VERSION_CODES.LOLLIPOP)
 private fun isArmEabiV8a(): Boolean {
     return Build.SUPPORTED_ABIS[0].equals("arm64-v8a")
 }
