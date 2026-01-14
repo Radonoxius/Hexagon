@@ -17,28 +17,25 @@ private class CpuInfo(private val lines: List<String>) {
         getHighPerfCpuCountByFrequencies()
     } catch (e: Exception) {
         Log.d(LOG_TAG, "Couldn't read CPU frequencies", e)
-
-        //This function feels flawed
         getHighPerfCpuCountByVariant()
     }
 
-    //Gets the # of cores with the higher (max) clock speeds
+    //Gets the (Total cores - # of cores in the lowest (max) clock freq cluster)
     private fun getHighPerfCpuCountByFrequencies(): Int =
         getCpuValues(property = "processor") { getMaxCpuFrequency(it.toInt()) }
             .also { Log.d(LOG_TAG, "Binned cpu frequencies (frequency, count): ${it.binnedValues()}") }
             .countDroppingMin()
 
-    //Gets the # of cores in the lower (max) clock speed cluster (???)
-    //This is a real wtf moment... (could be device dependent... idk)
+    //Gets the (Total cores - # of cores in the lowest (max) clock freq cluster)
     private fun getHighPerfCpuCountByVariant(): Int =
         getCpuValues(property = "CPU variant") { it.substringAfter("0x").toInt(radix = 16) }
             .also { Log.d(LOG_TAG, "Binned cpu variants (variant, count): ${it.binnedValues()}") }
-            .countKeepingMin()
+            .countDroppingMin()
 
     //Count the number of elements which have the same value
     private fun List<Int>.binnedValues() = groupingBy { it }.eachCount()
 
-    //String processing magic. Finally, sorts ints in ascending order and ruturns it as a list
+    //String processing magic. Finally, sorts ints in ascending order and returns it as a list
     private fun getCpuValues(property: String, mapper: (String) -> Int) = lines
         .asSequence()
         .filter { it.startsWith(property) }
@@ -51,13 +48,6 @@ private class CpuInfo(private val lines: List<String>) {
     private fun List<Int>.countDroppingMin(): Int {
         val min = min()
         return count { it > min }
-    }
-
-    //Get the no. of elements in the given list which are
-    //equal to the `minimum of the list`
-    private fun List<Int>.countKeepingMin(): Int {
-        val min = min()
-        return count { it == min }
     }
 
     companion object {

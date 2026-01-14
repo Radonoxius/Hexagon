@@ -1,5 +1,6 @@
 package ix.radon.hexagon.asr
 
+import android.annotation.SuppressLint
 import android.content.res.AssetManager
 import android.os.Build
 import android.util.Log
@@ -12,22 +13,34 @@ import java.util.concurrent.Executors
 private const val LOG_TAG = "LibWhisper"
 
 class WhisperContext private constructor(private var ptr: Long) {
-    // Meet Whisper C++ constraint: Don't access from more than one thread at a time.
+    //Meet Whisper C++
+    //Constraint: Don't access from more than one thread at a time.
     private val scope: CoroutineScope = CoroutineScope(
         Executors.newSingleThreadExecutor().asCoroutineDispatcher()
     )
 
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
-    suspend fun transcribeData(data: FloatArray, printTimestamp: Boolean = true): String = withContext(scope.coroutineContext) {
+    suspend fun transcribeData(
+        data: FloatArray,
+        printTimestamp: Boolean = true
+    ): String = withContext(scope.coroutineContext) {
         require(ptr != 0L)
         val numThreads = WhisperCpuConfig.preferredThreadCount
+
         Log.d(LOG_TAG, "Selecting $numThreads threads")
+
         WhisperLib.fullTranscribe(ptr, numThreads, data)
         val textCount = WhisperLib.getTextSegmentCount(ptr)
+
         return@withContext buildString {
             for (i in 0 until textCount) {
                 if (printTimestamp) {
-                    val textTimestamp = "[${toTimestamp(WhisperLib.getTextSegmentT0(ptr, i))} --> ${toTimestamp(WhisperLib.getTextSegmentT1(ptr, i))}]"
+                    val textTimestamp = "[${
+                        toTimestamp(
+                            WhisperLib.getTextSegmentT0(ptr, i))
+                    } --> ${
+                        toTimestamp(WhisperLib.getTextSegmentT1(ptr, i))
+                    }]"
+
                     val textSegment = WhisperLib.getTextSegment(ptr, i)
                     append("$textTimestamp: $textSegment\n")
                 } else {
@@ -37,17 +50,14 @@ class WhisperContext private constructor(private var ptr: Long) {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     suspend fun benchMemory(nthreads: Int): String = withContext(scope.coroutineContext) {
         return@withContext WhisperLib.benchMemcpy(nthreads)
     }
 
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     suspend fun benchGgmlMulMat(nthreads: Int): String = withContext(scope.coroutineContext) {
         return@withContext WhisperLib.benchGgmlMulMat(nthreads)
     }
 
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     suspend fun release() = withContext(scope.coroutineContext) {
         if (ptr != 0L) {
             WhisperLib.freeContext(ptr)
@@ -55,7 +65,6 @@ class WhisperContext private constructor(private var ptr: Long) {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     protected fun finalize() {
         runBlocking {
             release()
@@ -63,7 +72,6 @@ class WhisperContext private constructor(private var ptr: Long) {
     }
 
     companion object {
-        @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
         fun createContextFromFile(filePath: String): WhisperContext {
             val ptr = WhisperLib.initContext(filePath)
             if (ptr == 0L) {
@@ -72,7 +80,6 @@ class WhisperContext private constructor(private var ptr: Long) {
             return WhisperContext(ptr)
         }
 
-        @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
         fun createContextFromInputStream(stream: InputStream): WhisperContext {
             val ptr = WhisperLib.initContextFromInputStream(stream)
 
@@ -82,7 +89,6 @@ class WhisperContext private constructor(private var ptr: Long) {
             return WhisperContext(ptr)
         }
 
-        @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
         fun createContextFromAsset(assetManager: AssetManager, assetPath: String): WhisperContext {
             val ptr = WhisperLib.initContextFromAsset(assetManager, assetPath)
 
@@ -92,7 +98,6 @@ class WhisperContext private constructor(private var ptr: Long) {
             return WhisperContext(ptr)
         }
 
-        @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
         fun getSystemInfo(): String {
             return WhisperLib.getSystemInfo()
         }
@@ -100,7 +105,6 @@ class WhisperContext private constructor(private var ptr: Long) {
 }
 
 private class WhisperLib {
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     companion object {
         init {
             if (isArmEabiV7a()) {
@@ -109,8 +113,16 @@ private class WhisperLib {
                 System.loadLibrary("whisper_vfpv4")
             } else if (isArmEabiV8a()) {
                 // ARMv8.2a needs runtime detection support
-                Log.d(LOG_TAG, "Loading libwhisper_v8_va.so")
-                System.loadLibrary("whisper_v8_va")
+                if(isFphpSmeSveSupported()) {
+                    Log.d(LOG_TAG, "Loading libwhisper_v9_va.so")
+                    System.loadLibrary("whisper_v9_va")
+                } else if(isFphpSupported()) {
+                    Log.d(LOG_TAG, "Loading libwhisper_v8fp16_va.so")
+                    System.loadLibrary("whisper_v8fp16_va")
+                } else {
+                    Log.d(LOG_TAG, "Loading libwhisper_v8_va.so")
+                    System.loadLibrary("whisper_v8_va")
+                }
             } else {
                 Log.d(LOG_TAG, "Loading libwhisper.so")
                 System.loadLibrary("whisper")
@@ -135,6 +147,7 @@ private class WhisperLib {
 
 //  500 -> 00:05.000
 // 6000 -> 01:00.000
+@SuppressLint("DefaultLocale")
 private fun toTimestamp(t: Long, comma: Boolean = false): String {
     var msec = t * 10
     val hr = msec / (1000 * 60 * 60)
@@ -148,14 +161,36 @@ private fun toTimestamp(t: Long, comma: Boolean = false): String {
     return String.format("%02d:%02d:%02d%s%03d", hr, min, sec, delimiter, msec)
 }
 
-@RequiresApi(Build.VERSION_CODES.LOLLIPOP)
 private fun isArmEabiV7a(): Boolean {
     return Build.SUPPORTED_ABIS[0].equals("armeabi-v7a")
 }
 
-@RequiresApi(Build.VERSION_CODES.LOLLIPOP)
 private fun isArmEabiV8a(): Boolean {
     return Build.SUPPORTED_ABIS[0].equals("arm64-v8a")
+}
+
+fun isFphpSupported(): Boolean {
+    val info = cpuInfo()
+
+    if (info == null)
+        return false
+    else {
+        val features = getCpuValues(info.lines())
+        return features[0].contains("fphp")
+    }
+}
+
+fun isFphpSmeSveSupported(): Boolean {
+    val info = cpuInfo()
+
+    if (info == null)
+        return false
+    else {
+        val features = getCpuValues(info.lines())
+        return features[0].contains("sme") &&
+                features[0].contains("sve") &&
+                features[0].contains("fphp")
+    }
 }
 
 private fun cpuInfo(): String? {
@@ -168,3 +203,9 @@ private fun cpuInfo(): String? {
         null
     }
 }
+
+private fun getCpuValues(lines: List<String>) = lines
+    .asSequence()
+    .filter { it.startsWith("Features") }
+    .map { it.substringAfter(':').trim() }
+    .toList()

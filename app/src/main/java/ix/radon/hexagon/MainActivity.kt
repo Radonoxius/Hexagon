@@ -61,7 +61,7 @@ fun Greeting(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Welcome to Hexagon!"
+            text = "Welcome to hexagon!"
         )
     }
 }
